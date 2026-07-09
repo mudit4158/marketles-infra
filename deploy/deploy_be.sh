@@ -41,8 +41,6 @@ API_KEY=\$(pull_secret "marketlens-api-key")
 CORS_ORIGINS=\$(pull_secret "marketlens-cors-origins")
 SSL_DOMAIN=\$(pull_secret "marketlens-ssl-domain")
 SSL_EMAIL=\$(pull_secret "marketlens-ssl-email")
-SCHEDULER_INTERVAL_MINUTES=\$(pull_secret "marketlens-scheduler-interval-minutes")
-
 cat > "\${ENV_FILE}" <<EOF
 ENVIRONMENT=production
 LOG_LEVEL=INFO
@@ -51,7 +49,6 @@ CORS_ALLOWED_ORIGINS=\${CORS_ORIGINS}
 CORS_ALLOWED_ORIGIN_REGEX=
 API_KEY=\${API_KEY}
 SCHEDULER_ENABLED=true
-SCHEDULER_INTERVAL_MINUTES=\${SCHEDULER_INTERVAL_MINUTES}
 SCHEDULER_INGESTION_INTERVALS=1d,1h,5m,1m
 SCHEDULER_SOURCE_NAME=yfinance
 DOMAIN=\${SSL_DOMAIN}
