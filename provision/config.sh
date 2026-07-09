@@ -32,7 +32,7 @@ export DB_TAG="marketlens-db"
 export APP_TAG="marketlens-app"
 
 # GCS bucket for DB backups
-export BACKUP_BUCKET="marketlens-backups-${GCP_PROJECT}"
+export BACKUP_BUCKET="marketlens-backups"
 
 # GitHub repo to clone on VMs
 export BE_REPO="https://github.com/mudit4158/marketlens-be.git"
