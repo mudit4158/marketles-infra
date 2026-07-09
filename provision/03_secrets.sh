@@ -34,6 +34,7 @@ SECRETS=(
   "marketlens-ssl-domain:API domain e.g. api.yourdomain.com or marketlens.duckdns.org"
   "marketlens-ssl-email:Email for Let's Encrypt certificate renewal notices"
   "marketlens-cors-origins:Comma-separated allowed CORS origins e.g. https://marketlens-fe.vercel.app"
+  "marketlens-scheduler-interval-minutes:Ingestion frequency in minutes e.g. 10. Set to 0 for daily cron mode"
 )
 
 for entry in "${SECRETS[@]}"; do
