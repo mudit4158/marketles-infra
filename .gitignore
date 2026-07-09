@@ -1,0 +1,12 @@
+# Never commit actual secret values
+.env
+.env.*
+*.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# gcloud temp files
+*.json.tmp
+/tmp/
