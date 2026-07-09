@@ -4,7 +4,7 @@
 # Edit these values once before running any script.
 # ─────────────────────────────────────────────────────────────────────────────
 
-export GCP_PROJECT="your-gcp-project-id"        # ← FILL THIS IN: gcloud projects list
+export GCP_PROJECT="marketlens-501914"
 export SSL_DOMAIN="marketlenss.duckdns.org"     # DuckDNS subdomain
 export GCP_REGION="asia-south1"                  # Mumbai
 export GCP_ZONE="asia-south1-a"
