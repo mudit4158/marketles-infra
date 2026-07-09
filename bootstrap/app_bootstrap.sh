@@ -77,14 +77,20 @@ echo "    .env.app written (permissions: 600)"
 echo "==> [4/8] Updating nginx config with domain: ${SSL_DOMAIN}"
 sed -i "s/api.yourdomain.com/${SSL_DOMAIN}/g" "${BE_DIR}/nginx/conf.d/marketlens.conf"
 
-echo "==> [5/8] Starting nginx (HTTP only for certbot challenge)"
+echo "==> [5/8] Starting nginx with HTTP-only bootstrap config for certbot challenge"
 cd "${BE_DIR}"
+# Temporarily rename the full config so nginx starts without needing the SSL cert or api upstream
+mv "${BE_DIR}/nginx/conf.d/marketlens.conf" "${BE_DIR}/nginx/conf.d/marketlens.conf.disabled"
 docker compose -f docker-compose.app.yml up -d nginx
-
 sleep 5
 
 echo "==> [6/8] Obtaining SSL certificate for ${SSL_DOMAIN}"
 docker compose -f docker-compose.app.yml --env-file "${ENV_FILE}" run --rm certbot
+
+# Restore the full config now that certs exist
+mv "${BE_DIR}/nginx/conf.d/marketlens.conf.disabled" "${BE_DIR}/nginx/conf.d/marketlens.conf"
+# Remove the bootstrap config so only the full config is active
+rm -f "${BE_DIR}/nginx/conf.d/certbot-bootstrap.conf"
 
 echo "==> [7/8] Starting all services (nginx + FastAPI)"
 docker compose -f docker-compose.app.yml --env-file "${ENV_FILE}" up -d
