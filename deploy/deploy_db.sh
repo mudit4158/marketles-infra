@@ -41,11 +41,17 @@ chmod 600 "${ENV_FILE}"
 
 echo "  Restarting services..."
 cd "${BE_DIR}"
-docker compose -f docker-compose.db.yml --env-file "${ENV_FILE}" up -d
+sudo docker compose -f docker-compose.db.yml --env-file "${ENV_FILE}" up -d
 
 echo "  Verifying DB health..."
-sleep 5
-docker exec marketlens-timescaledb pg_isready -U marketlens -d marketlens
+for i in $(seq 1 12); do
+  if sudo docker exec marketlens-timescaledb pg_isready -U marketlens -d marketlens -q 2>/dev/null; then
+    echo "  TimescaleDB is healthy ✓"
+    break
+  fi
+  echo "  Attempt ${i}/12 — waiting..."
+  sleep 5
+done
 
 echo "✅  DB deploy complete."
 REMOTE

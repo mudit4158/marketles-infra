@@ -71,8 +71,12 @@ EOF
 chmod 600 "${ENV_FILE}"
 echo "    .env.app written (permissions: 600)"
 
-echo "==> [4/8] Updating nginx config with domain: ${SSL_DOMAIN}"
-sed -i "s/api.yourdomain.com/${SSL_DOMAIN}/g" "${BE_DIR}/nginx/conf.d/marketlens.conf"
+echo "==> [4/8] Verifying nginx config has correct domain"
+if grep -q "api.yourdomain.com" "${BE_DIR}/nginx/conf.d/marketlens.conf"; then
+  echo "    WARNING: nginx config still has placeholder domain — fixing..."
+  sed -i "s/api.yourdomain.com/${SSL_DOMAIN}/g" "${BE_DIR}/nginx/conf.d/marketlens.conf"
+fi
+echo "    nginx domain: $(grep server_name ${BE_DIR}/nginx/conf.d/marketlens.conf | head -1)"
 
 echo "==> [5/8] Getting SSL certificate for ${SSL_DOMAIN}"
 cd "${BE_DIR}"

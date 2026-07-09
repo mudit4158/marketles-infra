@@ -6,6 +6,10 @@
 # Usage:
 #   bash deploy/deploy_be.sh              # full deploy (rebuild image)
 #   bash deploy/deploy_be.sh --no-build  # restart only (skip image rebuild)
+#
+# Note: image is currently built on the VM from source (git pull + docker build).
+# Future improvement: push pre-built image from CI → GCP Artifact Registry,
+# and have this script do docker pull instead of build.
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 source "$(dirname "$0")/../provision/config.sh"
@@ -56,16 +60,22 @@ SSL_EMAIL=\${SSL_EMAIL}
 EOF
 chmod 600 "\${ENV_FILE}"
 
-echo "  Restarting services (${BUILD_FLAG:-no rebuild})..."
+echo "  Restarting services..."
 cd "\${BE_DIR}"
-docker compose -f docker-compose.app.yml --env-file "\${ENV_FILE}" up -d ${BUILD_FLAG}
+sudo docker compose -f docker-compose.app.yml --env-file "\${ENV_FILE}" up -d ${BUILD_FLAG}
+
+echo "  Waiting for API to be healthy..."
+for i in \$(seq 1 30); do
+  if sudo docker exec marketlens-api curl -sf http://localhost:8001/health > /dev/null 2>&1; then
+    echo "  API is healthy ✓"
+    break
+  fi
+  echo "  Attempt \${i}/30 — waiting..."
+  sleep 5
+done
 
 echo "  Running any pending migrations..."
-sleep 10
-docker exec marketlens-api python -m alembic upgrade head
-
-echo "  Verifying API health..."
-curl -sf http://localhost:8001/health | grep -q "ok" && echo "  API is healthy ✓"
+sudo docker exec marketlens-api python -m alembic upgrade head
 
 echo "✅  App deploy complete."
 REMOTE
