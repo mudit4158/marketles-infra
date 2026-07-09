@@ -1,21 +1,22 @@
 #!/usr/bin/env bash
 # ── App VM bootstrap (run once after VM creation) ─────────────────────────────
-# SSH into the App VM and run this script:
-#   gcloud compute ssh marketlens-app --zone=asia-south1-a
-#   bash <(curl -fsSL https://raw.githubusercontent.com/mudit4158/marketlens-infra/main/bootstrap/app_bootstrap.sh)
+# Run from your LOCAL machine (not from inside the VM):
+#   gcloud compute ssh marketlens-app --zone=asia-south1-a -- 'bash -s' < bootstrap/app_bootstrap.sh
 #
 # What it does:
-#   1. Installs Docker
+#   1. Installs Docker (uses sudo throughout — no group-change gymnastics)
 #   2. Clones the marketlens-be repo
 #   3. Pulls secrets from Secret Manager → writes .env.app
 #   4. Updates nginx config with real domain
-#   5. Obtains SSL certificate via certbot
-#   6. Starts nginx + FastAPI
+#   5. Starts nginx with HTTP-only bootstrap config → runs certbot → swaps to full config
+#   6. Starts all services (nginx + FastAPI)
 #   7. Runs alembic migrations + seed + backfill
 #   8. Sets up certbot auto-renewal cron
 #
 # Prerequisites:
-#   - Domain A record already pointing to this VM's external IP
+#   - Domain A record pointing to this VM's external IP BEFORE running
+#   - DB VM bootstrap complete and TimescaleDB healthy
+#   - marketlens-db-internal-ip secret set in Secret Manager
 #   - All secrets set in Secret Manager (run provision/03_secrets.sh first)
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
@@ -25,13 +26,9 @@ BE_DIR="/opt/marketlens"
 ENV_FILE="${BE_DIR}/.env.app"
 
 echo "==> [1/8] Installing Docker"
-curl -fsSL https://get.docker.com | sh
+curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker "$USER"
-newgrp docker <<'DOCKERGRP'
-
-BE_REPO="https://github.com/mudit4158/marketlens-be.git"
-BE_DIR="/opt/marketlens"
-ENV_FILE="${BE_DIR}/.env.app"
+echo "    Docker installed."
 
 echo "==> [2/8] Cloning marketlens-be"
 sudo git clone "${BE_REPO}" "${BE_DIR}" 2>/dev/null || (cd "${BE_DIR}" && sudo git pull origin main)
@@ -77,37 +74,54 @@ echo "    .env.app written (permissions: 600)"
 echo "==> [4/8] Updating nginx config with domain: ${SSL_DOMAIN}"
 sed -i "s/api.yourdomain.com/${SSL_DOMAIN}/g" "${BE_DIR}/nginx/conf.d/marketlens.conf"
 
-echo "==> [5/8] Starting nginx with HTTP-only bootstrap config for certbot challenge"
+echo "==> [5/8] Getting SSL certificate for ${SSL_DOMAIN}"
 cd "${BE_DIR}"
-# Temporarily rename the full config so nginx starts without needing the SSL cert or api upstream
+
+# Phase 1: start nginx with HTTP-only bootstrap config (no SSL certs or api upstream needed)
+# Disable the full config temporarily so nginx starts cleanly
 mv "${BE_DIR}/nginx/conf.d/marketlens.conf" "${BE_DIR}/nginx/conf.d/marketlens.conf.disabled"
-docker compose -f docker-compose.app.yml up -d nginx
-sleep 5
+sudo docker compose -f docker-compose.app.yml up -d nginx
 
-echo "==> [6/8] Obtaining SSL certificate for ${SSL_DOMAIN}"
-docker compose -f docker-compose.app.yml --env-file "${ENV_FILE}" run --rm certbot
+echo "    Waiting for nginx to be ready on port 80..."
+for i in $(seq 1 10); do
+  if curl -sf http://localhost:80/ > /dev/null 2>&1; then
+    echo "    nginx is up."
+    break
+  fi
+  sleep 3
+done
 
-# Restore the full config now that certs exist
+# Phase 2: run certbot
+sudo docker compose -f docker-compose.app.yml --env-file "${ENV_FILE}" run --rm certbot
+
+# Phase 3: restore full config (SSL certs now exist) and remove bootstrap config
 mv "${BE_DIR}/nginx/conf.d/marketlens.conf.disabled" "${BE_DIR}/nginx/conf.d/marketlens.conf"
-# Remove the bootstrap config so only the full config is active
 rm -f "${BE_DIR}/nginx/conf.d/certbot-bootstrap.conf"
 
-echo "==> [7/8] Starting all services (nginx + FastAPI)"
-docker compose -f docker-compose.app.yml --env-file "${ENV_FILE}" up -d
+echo "==> [6/8] Starting all services (nginx + FastAPI)"
+sudo docker compose -f docker-compose.app.yml --env-file "${ENV_FILE}" up -d
 
 echo "    Waiting for API to be healthy..."
-sleep 20
-docker exec marketlens-api python -m alembic upgrade head
-docker exec marketlens-api python -m scripts.seed_instruments
+for i in $(seq 1 30); do
+  if sudo docker exec marketlens-api curl -sf http://localhost:8001/health > /dev/null 2>&1; then
+    echo "    API is healthy."
+    break
+  fi
+  echo "    Attempt ${i}/30 — waiting..."
+  sleep 5
+done
+
+echo "==> [7/8] Running migrations, seed, and backfill"
+sudo docker exec marketlens-api python -m alembic upgrade head
+sudo docker exec marketlens-api python -m scripts.seed_instruments
 echo "    Running 1d backfill (this takes a few minutes)..."
-docker exec marketlens-api python -m scripts.backfill_prices --intervals 1d --symbols GOLD,USDINR
+sudo docker exec marketlens-api python -m scripts.backfill_prices --intervals 1d --symbols GOLD,USDINR
 echo "    Running intraday backfill..."
-docker exec marketlens-api python -m scripts.backfill_prices --intervals 1h,5m --symbols GOLD,USDINR
+sudo docker exec marketlens-api python -m scripts.backfill_prices --intervals 1h,5m --symbols GOLD,USDINR
 
 echo "==> [8/8] Setting up certbot auto-renewal cron"
-(crontab -l 2>/dev/null; echo "0 3 * * * cd ${BE_DIR} && docker compose -f docker-compose.app.yml --env-file ${ENV_FILE} run --rm certbot && docker compose -f docker-compose.app.yml exec nginx nginx -s reload") | crontab -
+(crontab -l 2>/dev/null; echo "0 3 * * * cd ${BE_DIR} && sudo docker compose -f docker-compose.app.yml --env-file ${ENV_FILE} run --rm certbot && sudo docker compose -f docker-compose.app.yml exec nginx nginx -s reload") | crontab -
 
 echo ""
 echo "✅  App bootstrap complete."
 echo "    API health: curl https://${SSL_DOMAIN}/health"
-DOCKERGRP

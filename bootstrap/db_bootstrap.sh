@@ -1,29 +1,35 @@
 #!/usr/bin/env bash
 # ── DB VM bootstrap (run once after VM creation) ──────────────────────────────
-# SSH into the DB VM and run this script:
-#   gcloud compute ssh marketlens-db --zone=asia-south1-a
-#   bash <(curl -fsSL https://raw.githubusercontent.com/mudit4158/marketlens-infra/main/bootstrap/db_bootstrap.sh)
+# Run from your LOCAL machine (not from inside the VM):
+#   gcloud compute ssh marketlens-db --zone=asia-south1-a -- 'bash -s' < bootstrap/db_bootstrap.sh
 #
 # What it does:
-#   1. Installs Docker
-#   2. Formats and mounts the persistent disk at /mnt/disks/pgdata
+#   1. Installs Docker (uses sudo throughout — no group-change gymnastics)
+#   2. Formats and mounts the persistent disk at /mnt/disks/pgdata/pg
 #   3. Clones the marketlens-be repo
 #   4. Pulls secrets from Secret Manager → writes .env.db
 #   5. Starts TimescaleDB
+#
+# Prerequisites:
+#   - Persistent disk attached to the VM (done by provision/04_db_vm.sh)
+#   - All DB-related secrets set in Secret Manager
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
 BE_REPO="https://github.com/mudit4158/marketlens-be.git"
 BE_DIR="/opt/marketlens"
 MOUNT_POINT="/mnt/disks/pgdata"
+PG_DATA="${MOUNT_POINT}/pg"
 ENV_FILE="${BE_DIR}/.env.db"
 
 echo "==> [1/5] Installing Docker"
-curl -fsSL https://get.docker.com | sh
+curl -fsSL https://get.docker.com | sudo sh
+# Add user to docker group for future interactive sessions (not needed here since we use sudo)
 sudo usermod -aG docker "$USER"
+echo "    Docker installed."
 
 echo "==> [2/5] Mounting persistent disk"
-# Find the attached data disk (not the boot disk, which is /dev/sda)
+# Find the attached data disk (not the boot disk /dev/sda)
 DATA_DISK=$(lsblk -dpno NAME,TYPE | awk '$2=="disk"' | grep -v sda | awk '{print $1}' | head -1)
 echo "    Detected data disk: ${DATA_DISK}"
 
@@ -41,8 +47,12 @@ UUID=$(sudo blkid -s UUID -o value "${DATA_DISK}")
 if ! grep -q "${UUID}" /etc/fstab; then
   echo "UUID=${UUID} ${MOUNT_POINT} ext4 defaults,nofail 0 2" | sudo tee -a /etc/fstab
 fi
-sudo chmod 777 "${MOUNT_POINT}"
-echo "    Mounted at ${MOUNT_POINT}"
+
+# Create the pg subdirectory — postgres can't init if the mount root has lost+found
+sudo mkdir -p "${PG_DATA}"
+# UID 999 = postgres user inside the timescaledb container
+sudo chown -R 999:999 "${PG_DATA}"
+echo "    Mounted at ${MOUNT_POINT}, data dir: ${PG_DATA}"
 
 echo "==> [3/5] Cloning marketlens-be"
 sudo git clone "${BE_REPO}" "${BE_DIR}" 2>/dev/null || (cd "${BE_DIR}" && sudo git pull origin main)
@@ -73,8 +83,18 @@ echo "    .env.db written (permissions: 600)"
 
 echo "==> [5/5] Starting TimescaleDB"
 cd "${BE_DIR}"
-docker compose -f docker-compose.db.yml --env-file "${ENV_FILE}" up -d
+sudo docker compose -f docker-compose.db.yml --env-file "${ENV_FILE}" up -d
+
+echo "    Waiting for TimescaleDB to be healthy..."
+for i in $(seq 1 30); do
+  if sudo docker exec marketlens-timescaledb pg_isready -U marketlens -d marketlens -q 2>/dev/null; then
+    echo "    TimescaleDB is ready."
+    break
+  fi
+  echo "    Attempt ${i}/30 — waiting..."
+  sleep 5
+done
 
 echo ""
 echo "✅  DB bootstrap complete."
-echo "    Verify: docker exec marketlens-timescaledb pg_isready -U marketlens -d marketlens"
+echo "    Verify: sudo docker exec marketlens-timescaledb pg_isready -U marketlens -d marketlens"
