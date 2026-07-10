@@ -49,6 +49,9 @@ write_app_env() {
   SSL_EMAIL=$(pull_secret "marketlens-ssl-email")
   UPSTOX_API_KEY=$(pull_secret "marketlens-upstox-api-key")
   UPSTOX_API_SECRET=$(pull_secret "marketlens-upstox-api-secret")
+  UPSTOX_MOBILE=$(pull_secret "marketlens-upstox-mobile")
+  UPSTOX_PIN=$(pull_secret "marketlens-upstox-pin")
+  UPSTOX_TOTP_SECRET=$(pull_secret "marketlens-upstox-totp-secret")
   cat > "${env_file}" <<EOF
 ENVIRONMENT=production
 LOG_LEVEL=INFO
@@ -63,6 +66,9 @@ DOMAIN=${SSL_DOMAIN}
 SSL_EMAIL=${SSL_EMAIL}
 UPSTOX_API_KEY=${UPSTOX_API_KEY}
 UPSTOX_API_SECRET=${UPSTOX_API_SECRET}
+UPSTOX_MOBILE=${UPSTOX_MOBILE}
+UPSTOX_PIN=${UPSTOX_PIN}
+UPSTOX_TOTP_SECRET=${UPSTOX_TOTP_SECRET}
 EOF
   chmod 600 "${env_file}"
   echo "  .env.app written ✓"

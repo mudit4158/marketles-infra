@@ -36,6 +36,9 @@ SECRETS=(
   "marketlens-cors-origins:Comma-separated allowed CORS origins e.g. https://marketlens-fe.vercel.app"
   "marketlens-upstox-api-key:Upstox API key from the Upstox developer portal"
   "marketlens-upstox-api-secret:Upstox API secret from the Upstox developer portal"
+  "marketlens-upstox-mobile:Upstox registered mobile number (10 digits, no +91)"
+  "marketlens-upstox-pin:Upstox 6-digit login PIN"
+  "marketlens-upstox-totp-secret:Base32 TOTP secret from Upstox 2FA setup page"
 )
 
 for entry in "${SECRETS[@]}"; do
