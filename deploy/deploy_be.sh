@@ -41,6 +41,11 @@ API_KEY=\$(pull_secret "marketlens-api-key")
 CORS_ORIGINS=\$(pull_secret "marketlens-cors-origins")
 SSL_DOMAIN=\$(pull_secret "marketlens-ssl-domain")
 SSL_EMAIL=\$(pull_secret "marketlens-ssl-email")
+UPSTOX_API_KEY=\$(pull_secret "marketlens-upstox-api-key")
+UPSTOX_API_SECRET=\$(pull_secret "marketlens-upstox-api-secret")
+UPSTOX_MOBILE=\$(pull_secret "marketlens-upstox-mobile")
+UPSTOX_PIN=\$(pull_secret "marketlens-upstox-pin")
+UPSTOX_TOTP_SECRET=\$(pull_secret "marketlens-upstox-totp-secret")
 cat > "\${ENV_FILE}" <<EOF
 ENVIRONMENT=production
 LOG_LEVEL=INFO
@@ -53,6 +58,11 @@ SCHEDULER_INGESTION_INTERVALS=1d,1h,5m,1m
 SCHEDULER_SOURCE_NAME=yfinance
 DOMAIN=\${SSL_DOMAIN}
 SSL_EMAIL=\${SSL_EMAIL}
+UPSTOX_API_KEY=\${UPSTOX_API_KEY}
+UPSTOX_API_SECRET=\${UPSTOX_API_SECRET}
+UPSTOX_MOBILE=\${UPSTOX_MOBILE}
+UPSTOX_PIN=\${UPSTOX_PIN}
+UPSTOX_TOTP_SECRET=\${UPSTOX_TOTP_SECRET}
 EOF
 chmod 600 "\${ENV_FILE}"
 
